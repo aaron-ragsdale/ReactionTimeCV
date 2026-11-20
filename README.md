@@ -1,4 +1,5 @@
-REACH! 🎯
+REACH! 
+
 A webcam-powered reaction game you play by reaching for targets on screen. Your browser tracks your wrists, so no controller or special equipment is needed.
 How to play
 1. Open the game in your browser and select Enable camera. Allow camera access when prompted.
