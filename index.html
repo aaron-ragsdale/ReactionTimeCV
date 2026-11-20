@@ -1,0 +1,196 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>REACH! v7 | Browser Hand Tracking Reaction Game</title>
+<style>
+:root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f7fafc;background:#0b1220}
+*{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% -30%,#1e3860,#0b1220 70%)}main{max-width:1160px;margin:0 auto;padding:22px}
+header{display:flex;justify-content:space-between;gap:12px;align-items:center;margin-bottom:20px}h1{font-size:clamp(26px,4vw,40px);letter-spacing:-1px;margin:0}h1 span{color:#65f2b6}header p{margin:5px 0 0;color:#aab8cd;font-size:14px}.pill{color:#71e9b0;border:1px solid #327a63;background:#163a35;border-radius:50px;padding:8px 12px;font-size:12px;font-weight:700;white-space:nowrap}
+.stats{display:grid;grid-template-columns:repeat(6,1fr);gap:12px;margin-bottom:14px}.stat{background:#162235;border:1px solid #2b3a50;border-radius:13px;padding:13px 16px}.stat label{display:block;color:#aebcd0;text-transform:uppercase;letter-spacing:.08em;font-size:11px;font-weight:750}.stat strong{display:block;font-size:30px;font-variant-numeric:tabular-nums;margin-top:3px}
+.stage{position:relative;overflow:hidden;border-radius:18px;border:1px solid #324158;background:#101b2b;aspect-ratio:16/9;isolation:isolate}.stage canvas{width:100%;height:100%;display:block}.overlay{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;pointer-events:none;background:linear-gradient(90deg,rgba(8,15,29,.56),rgba(8,15,29,.14),rgba(8,15,29,.56))}.overlay.hidden{display:none}.message{text-align:center;max-width:80%;padding:16px}.message h2{margin:0 0 10px;font-size:clamp(25px,5vw,52px);text-shadow:0 3px 15px #07101d}.message p{font-size:clamp(13px,2vw,18px);color:#e0eaf4;margin:0;line-height:1.5}.stage-hint{position:absolute;bottom:12px;left:12px;background:#101b2bc7;border:1px solid #47566b;border-radius:8px;padding:7px 10px;font-size:12px;color:#d9e6f5;pointer-events:none}
+.controls{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin-top:15px}button{background:#293950;color:#f6f9ff;font:inherit;font-weight:700;padding:12px 19px;border:1px solid #465771;border-radius:10px;cursor:pointer;transition:background .15s}button:hover:enabled{background:#344a65}button.primary{background:#65e5b2;border-color:#65e5b2;color:#07251b}button.primary:hover:enabled{background:#85f5c9}button:disabled{opacity:.46;cursor:not-allowed}.check{color:#b4c3d5;display:flex;align-items:center;gap:7px;font-size:13px;margin-left:auto}.check input{accent-color:#65e5b2}
+.info{display:grid;grid-template-columns:1.2fr 1fr;gap:14px;margin-top:16px}.panel{background:#142035;border:1px solid #263a52;border-radius:13px;padding:16px}.panel h3{margin:0 0 6px;font-size:15px}.panel p{margin:0;color:#aabbd1;font-size:13px;line-height:1.6}.status{margin-top:9px;color:#9fecc7;font-size:13px;min-height:18px}.privacy{color:#8092ad;font-size:12px;margin:16px 0 0;line-height:1.5}
+@media(max-width:680px){main{padding:12px}.stats{grid-template-columns:repeat(3,1fr);gap:6px}.stat{padding:10px}.stat strong{font-size:23px}.stat label{font-size:9px}.info{grid-template-columns:1fr}.check{margin-left:0}.controls button{padding:10px 13px}header .pill{display:none}}
+/* Full-screen gameplay: the video canvas scales without changing its internal coordinates. */
+.stage:fullscreen{width:100vw;height:100dvh;max-width:none;aspect-ratio:auto;border:0;border-radius:0;background:#050a12;display:flex;align-items:center;justify-content:center}
+.stage:fullscreen canvas{width:100%;height:100%;object-fit:contain}
+.stage:fullscreen .stage-hint{bottom:18px;left:18px}
+.stage:fullscreen .overlay{z-index:3}
+.stage .fullscreen-toggle{position:absolute;top:12px;right:12px;z-index:5;background:#101b2bdc;border:1px solid #64758a;padding:9px 12px;font-size:13px;line-height:1.2;backdrop-filter:blur(5px)}
+.stage .fullscreen-hud{display:none;position:absolute;top:12px;left:12px;z-index:4;gap:10px;flex-wrap:wrap;pointer-events:none}
+.stage:fullscreen .fullscreen-hud{display:flex}
+.hud-stat{background:#101b2bdf;border:1px solid #58697d;border-radius:10px;padding:8px 13px;min-width:85px;backdrop-filter:blur(5px)}
+.hud-stat span{display:block;color:#c9d9ed;font-size:10px;font-weight:750;letter-spacing:.07em;text-transform:uppercase}
+.hud-stat strong{display:block;font-size:clamp(17px,2.5vw,30px);font-variant-numeric:tabular-nums}
+.stage .fullscreen-actions{display:none;position:absolute;bottom:16px;right:16px;z-index:5;gap:8px}
+.stage:fullscreen .fullscreen-actions{display:flex}
+.stage .fullscreen-actions button{padding:9px 12px;background:#101b2be8}
+@media(max-width:680px){.stage:fullscreen .fullscreen-hud{top:12px;left:10px;right:100px;gap:5px}.hud-stat{padding:5px 8px;min-width:65px}.hud-stat span{font-size:9px}.stage .fullscreen-toggle{top:9px;right:9px}.stage:fullscreen .stage-hint{bottom:16px}}
+</style>
+</head>
+<body>
+<main>
+<header><div><h1>REACH<span>!</span></h1><p>A camera-powered reaction challenge</p></div><div class="pill">ON-DEVICE HAND TRACKING</div></header>
+<div class="stats"><div class="stat"><label>Time left</label><strong id="time">30.0</strong></div><div class="stat"><label>Score</label><strong id="score">0</strong></div><div class="stat"><label>Green hits</label><strong id="hits">0</strong></div><div class="stat"><label>Red hits</label><strong id="redHits">0</strong></div><div class="stat"><label>Misses</label><strong id="misses">0</strong></div><div class="stat"><label>Avg reaction</label><strong id="avg">—</strong></div></div>
+<div class="stage" id="stage"><video id="video" autoplay playsinline muted hidden></video><canvas id="canvas" width="960" height="540" aria-label="Live camera and reaction targets"></canvas><div class="overlay" id="overlay"><div class="message"><h2 id="messageTitle">Ready to reach?</h2><p id="messageText">Enable your camera, keep both hands clearly visible, then start the 30-second challenge.</p></div></div><div class="stage-hint">Touch <span style="color:#68ffc2;font-weight:800">green</span> · avoid <span style="color:#ff838a;font-weight:800">red</span></div>
+<button class="fullscreen-toggle" id="fullscreenBtn" type="button" aria-label="Enter full screen">⛶ Full Screen</button>
+<div class="fullscreen-hud" aria-live="off"><div class="hud-stat"><span>Time</span><strong id="fsTime">30.0</strong></div><div class="hud-stat"><span>Score</span><strong id="fsScore">0</strong></div><div class="hud-stat"><span>Green</span><strong id="fsHits">0</strong></div><div class="hud-stat"><span>Red</span><strong id="fsRedHits">0</strong></div><div class="hud-stat"><span>Misses</span><strong id="fsMisses">0</strong></div></div>
+<div class="fullscreen-actions"><button type="button" id="fsStartBtn">Start game</button><button type="button" id="fsStopBtn">Stop</button></div></div>
+<div class="controls"><button id="cameraBtn">Enable camera</button><label class="check" style="margin-left:0">Tracking mode <select id="trackingMode" aria-label="Tracking performance" style="background:#293950;color:white;border:1px solid #465771;border-radius:8px;padding:9px"><option value="smooth">Smooth (iPad)</option><option value="standard">Standard (Mac)</option></select></label><label class="check" style="margin-left:0">Processor <select id="delegateMode" aria-label="Hand tracking processor" style="background:#293950;color:white;border:1px solid #465771;border-radius:8px;padding:9px"><option value="GPU">GPU (default)</option><option value="CPU">CPU (alternative)</option></select></label><button class="primary" id="startBtn" disabled>Start game</button><button id="stopBtn" disabled>Stop</button><button id="csvBtn" disabled>Download CSV</button><label class="check"><input type="checkbox" id="poseCheck" checked>Show hands</label></div>
+<div class="info"><div class="panel"><h3>How to play</h3><p>Reach into green circles with your palm or fingertips. Faster green hits earn more points (100–1,000 each). Red circles cost 300 points if touched. Targets arrive at unpredictable intervals, with at most two green circles and one red circle visible at once. Green targets now disappear sooner, and hand tracking uses light smoothing plus extra green-hit tolerance. Missed green circles count as misses but do not deduct points. The preview is mirrored. On iPad, select Smooth tracking before enabling the camera. Select Full Screen on the camera view for immersive play (Escape exits full screen).</p></div><div class="panel"><h3>Tracking</h3><p id="tracking">Camera is off.</p><p id="diagnostics" style="margin-top:7px">Choose Smooth on iPad; try CPU if GPU tracking remains jittery. Refresh to change processor.</p><div class="status" id="status" role="status" aria-live="polite"></div></div></div>
+<p class="privacy">Privacy: hand inference runs locally in your browser. No camera frames are uploaded by this app. On first load, your browser downloads the MediaPipe JavaScript/WASM and model from public hosting; no account or paid API is needed.</p>
+</main>
+<script type="module">
+import {HandLandmarker,FilesetResolver} from 'https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/vision_bundle.mjs';
+const MODEL='https://storage.googleapis.com/mediapipe-models/hand_landmarker/hand_landmarker/float16/1/hand_landmarker.task';
+const WASM='https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@0.10.21/wasm';
+const W=960,H=540,DURATION=30000,RADIUS=35,MIN_SPAWN_GRACE=160,RED_PENALTY=300;
+// Keep target density manageable while retaining simultaneous distractors.
+const MAX_TARGETS=3,MAX_GREEN=2,MAX_RED=1;
+const GREEN_HIT_PADDING=22,RED_HIT_PADDING=8;
+// Exponential smoothing: larger weights follow motion faster, smaller weights reduce jitter.
+const SMOOTHING_WEIGHT=.62;
+const randomBetween=(min,max)=>min+Math.random()*(max-min);
+// Target timing is independent of elapsed game time. Bursts and pauses vary from round to round.
+function nextGap(){const r=Math.random();return r<.20?randomBetween(160,340):r<.82?randomBetween(420,930):randomBetween(1000,1450)}
+const $=id=>document.getElementById(id);const video=$('video'),canvas=$('canvas'),ctx=canvas.getContext('2d');
+let filteredHands=[];
+let activeDelegate='GPU',inferenceMs=0,poseFPS=0,poseFrames=0,fpsSince=0,trackingStatusAt=0,frameInterval=75,landmarker=null,stream=null,handResults=null,modelReady=false,playing=false,started=0,ended=0,targets=[],nextSpawn=0,lastInfer=0,lastVideoTime=-1,prevHands={},events=[],hits=0,misses=0,redHits=0,score=0,sessionEnd=0,flashes=[],nextId=1;
+const clamp=(x,a,b)=>Math.min(b,Math.max(a,x));
+function overlay(title,description,show=true){$('messageTitle').textContent=title;$('messageText').textContent=description;$('overlay').classList.toggle('hidden',!show)}
+function status(s){$('status').textContent=s}
+function buttons(){$('trackingMode').disabled=modelReady||playing;$('delegateMode').disabled=modelReady||playing;$('fsStartBtn').disabled=!modelReady||playing;$('fsStopBtn').disabled=!playing;$('startBtn').disabled=!modelReady||playing;$('stopBtn').disabled=!playing;$('cameraBtn').disabled=modelReady||playing;$('csvBtn').disabled=events.length===0}
+function updateStats(now=performance.now()){$('time').textContent=(playing?Math.max(0,(ended-now)/1000):sessionEnd?0:DURATION/1000).toFixed(1);$('score').textContent=score.toLocaleString();$('hits').textContent=hits;$('redHits').textContent=redHits;$('misses').textContent=misses;$('fsTime').textContent=$('time').textContent;$('fsScore').textContent=$('score').textContent;$('fsHits').textContent=hits;$('fsRedHits').textContent=redHits;$('fsMisses').textContent=misses;const times=events.filter(e=>e.outcome==='hit_green').map(e=>e.reaction_ms);$('avg').textContent=times.length?Math.round(times.reduce((a,b)=>a+b,0)/times.length)+' ms':'—'}
+// A single Hand Landmarker estimates up to two hands (21 landmarks each).
+// The game uses fingertips and palm center for collisions, not the wrist landmark.
+function smoothLandmarks(result){
+  const raw=result?.landmarks||[];
+  if(!raw.length){filteredHands=[];return}
+  filteredHands=raw.map((points,i)=>points.map((p,j)=>{
+    const old=filteredHands[i]?.[j];
+    if(!old)return {...p};
+    const a=SMOOTHING_WEIGHT;
+    return {...p,x:old.x+(p.x-old.x)*a,y:old.y+(p.y-old.y)*a,z:old.z+(p.z-old.z)*a};
+  }));
+}
+function handsFromPose(){
+  const output=[];
+  filteredHands.forEach((pts,i)=>{
+    if(pts.length<21)return;
+    // Landmark 0 is the wrist; MCP knuckles define the palm, 4/8/12/16/20 the fingertips.
+    const palmIds=[0,5,9,13,17];
+    const palm={x:palmIds.reduce((sum,k)=>sum+pts[k].x,0)/palmIds.length,
+                y:palmIds.reduce((sum,k)=>sum+pts[k].y,0)/palmIds.length};
+    const key='hand_'+(i+1);
+    const candidates=[{point:palm,part:'palm'},...[4,8,12,16,20].map((k)=>({point:pts[k],part:'fingertip'}))];
+    const points=candidates.map(({point,part})=>({part,x:(1-point.x)*W,y:point.y*H})).filter(p=>p.x>=0&&p.x<=W&&p.y>=0&&p.y<=H);
+    if(points.length)output.push({hand:key,points,x:points[0].x,y:points[0].y});
+  });
+  return output;
+}
+function greenPoints(ms){return Math.round(clamp(1000-0.45*ms,100,1000)/10)*10}
+function spawnTarget(now){
+  if(targets.length>=MAX_TARGETS)return;
+  const greens=targets.filter(t=>t.kind==='green').length;
+  const reds=targets.length-greens;
+  // Reds are occasional distractors; greens are the main task.
+  const kind=(reds<MAX_RED&&Math.random()<.30)||greens>=MAX_GREEN?'red':'green';
+  if((kind==='red'&&reds>=MAX_RED)||(kind==='green'&&greens>=MAX_GREEN))return;
+  const hands=handsFromPose();
+  for(let i=0;i<90;i++){
+    const p={x:80+Math.random()*(W-160),y:80+Math.random()*(H-160)};
+    if(targets.some(t=>Math.hypot(t.x-p.x,t.y-p.y)<RADIUS*2+42))continue;
+    if(hands.some(h=>h.points.some(pt=>Math.hypot(pt.x-p.x,pt.y-p.y)<RADIUS+75)))continue;
+    const lifetime=kind==='red'?randomBetween(800,1200):randomBetween(1400,1950);
+    const t={...p,id:nextId++,kind,born:now,lifetime,expires:Math.min(ended,now+lifetime),active_at_spawn:targets.length+1};
+    targets.push(t);
+    // Keep previously tracked hand points when another target joins the screen.
+    return;
+  }
+}
+function record(t,outcome,now,hand=''){const reaction=outcome==='miss_green'?null:Math.max(0,Math.round(now-t.born));const delta=outcome==='hit_green'?greenPoints(reaction):outcome==='hit_red'?-RED_PENALTY:0;score=Math.max(0,score+delta);if(outcome==='hit_green')hits++;if(outcome==='hit_red')redHits++;if(outcome==='miss_green')misses++;
+  events.push({event:events.length+1,active_at_spawn:t.active_at_spawn,target_id:t.id,target_color:t.kind,outcome,hand,reaction_ms:reaction??'',points_delta:delta,score_after:score,target_x:Math.round(t.x),target_y:Math.round(t.y),elapsed_ms:Math.round(now-started)});
+  flashes.push({x:t.x,y:t.y,time:now,color:outcome==='hit_red'?'#ff696f':outcome==='hit_green'?'#6bffbd':'#ffb15f',label:delta>0?'+'+delta:delta<0?String(delta):'MISS'});targets=targets.filter(v=>v.id!==t.id);
+}
+function finish(now,aborted=false){if(!playing)return;playing=false;sessionEnd=now;targets=[];updateStats(now);buttons();const times=events.filter(e=>e.outcome==='hit_green').map(e=>e.reaction_ms);overlay(aborted?'Session stopped':'Time!',`${score.toLocaleString()} points · ${hits} green hits · ${redHits} red hits · ${misses} missed greens · ${times.length?Math.round(times.reduce((a,b)=>a+b,0)/times.length)+' ms average':'No scored hits'}. Press Start game to play again.`);status('Session complete. Export the target events with Download CSV.')}
+function gameStep(now){
+  if(!playing)return;
+  if(now>=ended){finish(ended);return}
+  // Spawn events are scheduled independently of whether earlier targets were hit.
+  // A short randomized interval makes occasional bursts; longer intervals create pauses.
+  if(now>=nextSpawn){
+    spawnTarget(now);
+    nextSpawn=now+nextGap();
+  }
+  // Each target expires on its own clock, with reds deliberately shorter-lived.
+  for(const t of [...targets]){
+    if(now>=t.expires){
+      if(t.kind==='green')record(t,'miss_green',now);
+      else targets=targets.filter(v=>v.id!==t.id);
+    }
+  }
+  const hands=handsFromPose();
+  for(const hand of hands){
+    for(const t of [...targets]){
+      if(now-t.born<MIN_SPAWN_GRACE)continue;
+      const threshold=RADIUS+(t.kind==='green'?GREEN_HIT_PADDING:RED_HIT_PADDING);
+      // Touching with any fingertip OR palm qualifies. Only score once per target.
+      const inside=hand.points.some(p=>Math.hypot(p.x-t.x,p.y-t.y)<=threshold);
+      const prior=prevHands[hand.hand];
+      const previouslyOutside=!prior||prior.every(p=>Math.hypot(p.x-t.x,p.y-t.y)>threshold);
+      if(inside&&previouslyOutside){record(t,t.kind==='green'?'hit_green':'hit_red',now,hand.hand);break}
+    }
+  }
+  prevHands=Object.fromEntries(hands.map(h=>[h.hand,h.points.map(p=>({x:p.x,y:p.y}))]));
+  updateStats(now);
+}
+function draw(now){ctx.clearRect(0,0,W,H);ctx.fillStyle='#101b2d';ctx.fillRect(0,0,W,H);
+  if(video.readyState>=2){ctx.save();ctx.translate(W,0);ctx.scale(-1,1);ctx.drawImage(video,0,0,W,H);ctx.restore();ctx.fillStyle='rgba(9,17,30,.18)';ctx.fillRect(0,0,W,H)}else{ctx.fillStyle='#314257';ctx.textAlign='center';ctx.font='22px system-ui';ctx.fillText('Camera preview will appear here',W/2,H/2)}
+  if(filteredHands.length&&$('poseCheck').checked){
+    ctx.strokeStyle='rgba(106,255,188,.78)';ctx.lineWidth=2.5;
+    for(const pts of filteredHands){
+      for(const c of HandLandmarker.HAND_CONNECTIONS){
+        const a=pts[c.start],b=pts[c.end];if(!a||!b)continue;
+        ctx.beginPath();ctx.moveTo((1-a.x)*W,a.y*H);ctx.lineTo((1-b.x)*W,b.y*H);ctx.stroke();
+      }
+      for(const [i,p] of pts.entries()){
+        const tip=[4,8,12,16,20].includes(i);
+        ctx.fillStyle=tip?'#8cf7ff':'#77efb5';ctx.beginPath();ctx.arc((1-p.x)*W,p.y*H,tip?7:3.5,0,Math.PI*2);ctx.fill();
+      }
+    }
+  }
+  for(const t of targets){const pulse=1+.05*Math.sin(now/110),green=t.kind==='green';ctx.shadowBlur=30;ctx.shadowColor=green?'#49e69a':'#ff566a';ctx.fillStyle=green?'rgba(26,223,132,.23)':'rgba(255,58,82,.24)';ctx.beginPath();ctx.arc(t.x,t.y,(RADIUS+13)*pulse,0,Math.PI*2);ctx.fill();ctx.shadowBlur=0;ctx.fillStyle=green?'#4af5a5':'#ff5268';ctx.beginPath();ctx.arc(t.x,t.y,RADIUS*pulse,0,Math.PI*2);ctx.fill();ctx.fillStyle=green?'#0f583e':'#661a2b';ctx.beginPath();ctx.arc(t.x,t.y,12,0,Math.PI*2);ctx.fill();const remaining=Math.max(0,(t.expires-now)/t.lifetime);ctx.strokeStyle='white';ctx.lineWidth=5;ctx.beginPath();ctx.arc(t.x,t.y,RADIUS+8,-Math.PI/2,-Math.PI/2+remaining*2*Math.PI);ctx.stroke()}
+  flashes=flashes.filter(f=>now-f.time<650);for(const f of flashes){const age=now-f.time;ctx.globalAlpha=1-age/650;ctx.strokeStyle=f.color;ctx.lineWidth=5;ctx.beginPath();ctx.arc(f.x,f.y,RADIUS+15+age/13,0,Math.PI*2);ctx.stroke();ctx.font='bold 28px system-ui';ctx.textAlign='center';ctx.fillStyle=f.color;ctx.fillText(f.label,f.x,f.y-65-age/20);ctx.globalAlpha=1}
+  if(playing){ctx.fillStyle='#08121de0';ctx.fillRect(10,document.fullscreenElement===$('stage')?88:10,230,35);ctx.fillStyle='#fff';ctx.textAlign='left';ctx.font='bold 17px system-ui';ctx.fillText('RANDOM TARGETS · REACT!',20,document.fullscreenElement===$('stage')?112:34)}
+}
+function loop(now){
+  // MediaPipe detectForVideo is synchronous: don't let it monopolize the iPad main thread.
+  if(modelReady&&video.readyState>=2&&video.currentTime!==lastVideoTime&&now-lastInfer>=frameInterval){
+    try{
+      const t0=performance.now();const result=landmarker.detectForVideo(video,t0);
+      inferenceMs=performance.now()-t0;handResults=result;smoothLandmarks(result);
+      lastVideoTime=video.currentTime;lastInfer=performance.now();poseFrames++;
+      if(!fpsSince)fpsSince=lastInfer;
+      if(lastInfer-fpsSince>=1200){poseFPS=poseFrames*1000/(lastInfer-fpsSince);poseFrames=0;fpsSince=lastInfer}
+      if(lastInfer-trackingStatusAt>=650){const visible=handsFromPose();$('tracking').textContent=filteredHands.length?`${visible.length} hand(s) detected · palm + fingertips active`:'Looking for hands. Keep them in frame and improve lighting.';$('diagnostics').textContent=`Hands: ${poseFPS.toFixed(1)} FPS · inference ${Math.round(inferenceMs)} ms · ${$('trackingMode').value} mode · ${activeDelegate}`;trackingStatusAt=lastInfer}
+    }catch(e){status('Hand inference error: '+e.message)}
+  }
+  gameStep(now);draw(now);requestAnimationFrame(loop)
+}
+$('cameraBtn').addEventListener('click',async()=>{const btn=$('cameraBtn');btn.disabled=true;status('Requesting camera access and loading hand model…');try{if(!navigator.mediaDevices?.getUserMedia)throw Error('Webcam access requires HTTPS or localhost.');const smooth=$('trackingMode').value==='smooth';frameInterval=smooth?85:40;
+  stream=await navigator.mediaDevices.getUserMedia({video:{width:{ideal:smooth?640:960},height:{ideal:smooth?360:540},frameRate:{ideal:smooth?24:30},facingMode:'user'},audio:false});video.srcObject=stream;await video.play();
+  const vision=await FilesetResolver.forVisionTasks(WASM);activeDelegate=$('delegateMode').value;
+  try{landmarker=await HandLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:MODEL,delegate:activeDelegate},runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.5,minHandPresenceConfidence:.5,minTrackingConfidence:.5})}
+  catch(e){if(activeDelegate==='GPU'){status('GPU unavailable; falling back to CPU…');activeDelegate='CPU';landmarker=await HandLandmarker.createFromOptions(vision,{baseOptions:{modelAssetPath:MODEL,delegate:'CPU'},runningMode:'VIDEO',numHands:2,minHandDetectionConfidence:.5,minHandPresenceConfidence:.5,minTrackingConfidence:.5})}else throw e}modelReady=true;overlay('Camera ready','Hold both hands clearly in view, then select Start game.');status('Hand model loaded. Ready to play.');buttons()}catch(e){status('Setup failed: '+e.message);$('tracking').textContent='Check browser permissions and your network connection.';btn.disabled=false;if(stream){stream.getTracks().forEach(t=>t.stop());stream=null}}});
+$('startBtn').addEventListener('click',()=>{if(!modelReady||playing)return;events=[];hits=0;misses=0;redHits=0;score=0;sessionEnd=0;targets=[];flashes=[];nextId=1;started=performance.now();ended=started+DURATION;nextSpawn=started+randomBetween(300,750);prevHands={};playing=true;overlay('','',false);status('Game running. Hit green quickly; avoid red.');updateStats(started);buttons()});
+$('stopBtn').addEventListener('click',()=>finish(performance.now(),true));
+$('fsStartBtn').addEventListener('click',()=>$('startBtn').click());
+$('fsStopBtn').addEventListener('click',()=>$('stopBtn').click());
+$('fullscreenBtn').addEventListener('click',async()=>{try{if(document.fullscreenElement===$('stage'))await document.exitFullscreen();else await $('stage').requestFullscreen()}catch(e){status('Unable to enter full screen: '+e.message)}});
+document.addEventListener('fullscreenchange',()=>{const active=document.fullscreenElement===$('stage');$('fullscreenBtn').textContent=active?'⛶ Exit Full Screen':'⛶ Full Screen';$('fullscreenBtn').setAttribute('aria-label',active?'Exit full screen':'Enter full screen')});
+$('csvBtn').addEventListener('click',()=>{if(!events.length)return;const headers=['event','active_at_spawn','target_id','target_color','outcome','hand','reaction_ms','points_delta','score_after','target_x','target_y','elapsed_ms'];const csv=[headers.join(','),...events.map(e=>headers.map(k=>e[k]??'').join(','))].join('\r\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv;charset=utf-8'}));a.download='reach-session-'+new Date().toISOString().replace(/[:.]/g,'-')+'.csv';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),2000)});
+window.addEventListener('pagehide',()=>stream?.getTracks().forEach(t=>t.stop()));
+$('trackingMode').value=/iPad|iPhone|iPod|Macintosh.*Mobile/i.test(navigator.userAgent)?'smooth':'standard';buttons();requestAnimationFrame(loop);
+</script>
+</body></html>
