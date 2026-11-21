@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>REACH! v7 | Browser Hand Tracking Reaction Game</title>
+<title>REACH! v8 | Knuckle Tracking Reaction Game</title>
 <style>
 :root{font-family:Inter,ui-sans-serif,system-ui,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;color:#f7fafc;background:#0b1220}
 *{box-sizing:border-box}body{margin:0;min-height:100vh;background:radial-gradient(ellipse at 50% -30%,#1e3860,#0b1220 70%)}main{max-width:1160px;margin:0 auto;padding:22px}
@@ -38,7 +38,7 @@ header{display:flex;justify-content:space-between;gap:12px;align-items:center;ma
 <div class="fullscreen-hud" aria-live="off"><div class="hud-stat"><span>Time</span><strong id="fsTime">30.0</strong></div><div class="hud-stat"><span>Score</span><strong id="fsScore">0</strong></div><div class="hud-stat"><span>Green</span><strong id="fsHits">0</strong></div><div class="hud-stat"><span>Red</span><strong id="fsRedHits">0</strong></div><div class="hud-stat"><span>Misses</span><strong id="fsMisses">0</strong></div></div>
 <div class="fullscreen-actions"><button type="button" id="fsStartBtn">Start game</button><button type="button" id="fsStopBtn">Stop</button></div></div>
 <div class="controls"><button id="cameraBtn">Enable camera</button><label class="check" style="margin-left:0">Tracking mode <select id="trackingMode" aria-label="Tracking performance" style="background:#293950;color:white;border:1px solid #465771;border-radius:8px;padding:9px"><option value="smooth">Smooth (iPad)</option><option value="standard">Standard (Mac)</option></select></label><label class="check" style="margin-left:0">Processor <select id="delegateMode" aria-label="Hand tracking processor" style="background:#293950;color:white;border:1px solid #465771;border-radius:8px;padding:9px"><option value="GPU">GPU (default)</option><option value="CPU">CPU (alternative)</option></select></label><button class="primary" id="startBtn" disabled>Start game</button><button id="stopBtn" disabled>Stop</button><button id="csvBtn" disabled>Download CSV</button><label class="check"><input type="checkbox" id="poseCheck" checked>Show hands</label></div>
-<div class="info"><div class="panel"><h3>How to play</h3><p>Reach into green circles with your palm or fingertips. Faster green hits earn more points (100–1,000 each). Red circles cost 300 points if touched. Targets arrive at unpredictable intervals, with at most two green circles and one red circle visible at once. Green targets now disappear sooner, and hand tracking uses light smoothing plus extra green-hit tolerance. Missed green circles count as misses but do not deduct points. The preview is mirrored. On iPad, select Smooth tracking before enabling the camera. Select Full Screen on the camera view for immersive play (Escape exits full screen).</p></div><div class="panel"><h3>Tracking</h3><p id="tracking">Camera is off.</p><p id="diagnostics" style="margin-top:7px">Choose Smooth on iPad; try CPU if GPU tracking remains jittery. Refresh to change processor.</p><div class="status" id="status" role="status" aria-live="polite"></div></div></div>
+<div class="info"><div class="panel"><h3>How to play</h3><p>Reach into green circles with your knuckles or a closed fist. Faster green hits earn more points (100–1,000 each). Red circles cost 300 points if touched. Targets arrive at unpredictable intervals, with at most two green circles and one red circle visible at once. Green targets now disappear sooner, and hand tracking uses light smoothing plus extra green-hit tolerance. Missed green circles count as misses but do not deduct points. The preview is mirrored. On iPad, select Smooth tracking before enabling the camera. Select Full Screen on the camera view for immersive play (Escape exits full screen).</p></div><div class="panel"><h3>Tracking</h3><p id="tracking">Camera is off.</p><p id="diagnostics" style="margin-top:7px">Choose Smooth on iPad; try CPU if GPU tracking remains jittery. Refresh to change processor.</p><div class="status" id="status" role="status" aria-live="polite"></div></div></div>
 <p class="privacy">Privacy: hand inference runs locally in your browser. No camera frames are uploaded by this app. On first load, your browser downloads the MediaPipe JavaScript/WASM and model from public hosting; no account or paid API is needed.</p>
 </main>
 <script type="module">
@@ -63,7 +63,7 @@ function status(s){$('status').textContent=s}
 function buttons(){$('trackingMode').disabled=modelReady||playing;$('delegateMode').disabled=modelReady||playing;$('fsStartBtn').disabled=!modelReady||playing;$('fsStopBtn').disabled=!playing;$('startBtn').disabled=!modelReady||playing;$('stopBtn').disabled=!playing;$('cameraBtn').disabled=modelReady||playing;$('csvBtn').disabled=events.length===0}
 function updateStats(now=performance.now()){$('time').textContent=(playing?Math.max(0,(ended-now)/1000):sessionEnd?0:DURATION/1000).toFixed(1);$('score').textContent=score.toLocaleString();$('hits').textContent=hits;$('redHits').textContent=redHits;$('misses').textContent=misses;$('fsTime').textContent=$('time').textContent;$('fsScore').textContent=$('score').textContent;$('fsHits').textContent=hits;$('fsRedHits').textContent=redHits;$('fsMisses').textContent=misses;const times=events.filter(e=>e.outcome==='hit_green').map(e=>e.reaction_ms);$('avg').textContent=times.length?Math.round(times.reduce((a,b)=>a+b,0)/times.length)+' ms':'—'}
 // A single Hand Landmarker estimates up to two hands (21 landmarks each).
-// The game uses fingertips and palm center for collisions, not the wrist landmark.
+// The game uses the four MCP knuckles and their center for hits, including closed fists.
 function smoothLandmarks(result){
   const raw=result?.landmarks||[];
   if(!raw.length){filteredHands=[];return}
@@ -78,12 +78,15 @@ function handsFromPose(){
   const output=[];
   filteredHands.forEach((pts,i)=>{
     if(pts.length<21)return;
-    // Landmark 0 is the wrist; MCP knuckles define the palm, 4/8/12/16/20 the fingertips.
-    const palmIds=[0,5,9,13,17];
-    const palm={x:palmIds.reduce((sum,k)=>sum+pts[k].x,0)/palmIds.length,
-                y:palmIds.reduce((sum,k)=>sum+pts[k].y,0)/palmIds.length};
+    // MCP joints form the knuckle row: index 5, middle 9, ring 13, pinky 17.
+    // These landmarks remain close to the palm even when the fingers curl into a fist.
+    // The center also fills the space between the knuckles for natural fist collisions.
+    const mcpIds=[5,9,13,17];
+    const knuckleCenter={x:mcpIds.reduce((sum,k)=>sum+pts[k].x,0)/mcpIds.length,
+                         y:mcpIds.reduce((sum,k)=>sum+pts[k].y,0)/mcpIds.length};
     const key='hand_'+(i+1);
-    const candidates=[{point:palm,part:'palm'},...[4,8,12,16,20].map((k)=>({point:pts[k],part:'fingertip'}))];
+    const candidates=[{point:knuckleCenter,part:'knuckle_center'},
+                      ...mcpIds.map(k=>({point:pts[k],part:'mcp_knuckle'}))];
     const points=candidates.map(({point,part})=>({part,x:(1-point.x)*W,y:point.y*H})).filter(p=>p.x>=0&&p.x<=W&&p.y>=0&&p.y<=H);
     if(points.length)output.push({hand:key,points,x:points[0].x,y:points[0].y});
   });
@@ -135,7 +138,7 @@ function gameStep(now){
     for(const t of [...targets]){
       if(now-t.born<MIN_SPAWN_GRACE)continue;
       const threshold=RADIUS+(t.kind==='green'?GREEN_HIT_PADDING:RED_HIT_PADDING);
-      // Touching with any fingertip OR palm qualifies. Only score once per target.
+      // Touching with any MCP knuckle or their center qualifies. Only score once per target.
       const inside=hand.points.some(p=>Math.hypot(p.x-t.x,p.y-t.y)<=threshold);
       const prior=prevHands[hand.hand];
       const previouslyOutside=!prior||prior.every(p=>Math.hypot(p.x-t.x,p.y-t.y)>threshold);
@@ -155,8 +158,8 @@ function draw(now){ctx.clearRect(0,0,W,H);ctx.fillStyle='#101b2d';ctx.fillRect(0
         ctx.beginPath();ctx.moveTo((1-a.x)*W,a.y*H);ctx.lineTo((1-b.x)*W,b.y*H);ctx.stroke();
       }
       for(const [i,p] of pts.entries()){
-        const tip=[4,8,12,16,20].includes(i);
-        ctx.fillStyle=tip?'#8cf7ff':'#77efb5';ctx.beginPath();ctx.arc((1-p.x)*W,p.y*H,tip?7:3.5,0,Math.PI*2);ctx.fill();
+        const knuckle=[5,9,13,17].includes(i);
+        ctx.fillStyle=knuckle?'#8cf7ff':'#77efb5';ctx.beginPath();ctx.arc((1-p.x)*W,p.y*H,knuckle?7:3.5,0,Math.PI*2);ctx.fill();
       }
     }
   }
@@ -173,7 +176,7 @@ function loop(now){
       lastVideoTime=video.currentTime;lastInfer=performance.now();poseFrames++;
       if(!fpsSince)fpsSince=lastInfer;
       if(lastInfer-fpsSince>=1200){poseFPS=poseFrames*1000/(lastInfer-fpsSince);poseFrames=0;fpsSince=lastInfer}
-      if(lastInfer-trackingStatusAt>=650){const visible=handsFromPose();$('tracking').textContent=filteredHands.length?`${visible.length} hand(s) detected · palm + fingertips active`:'Looking for hands. Keep them in frame and improve lighting.';$('diagnostics').textContent=`Hands: ${poseFPS.toFixed(1)} FPS · inference ${Math.round(inferenceMs)} ms · ${$('trackingMode').value} mode · ${activeDelegate}`;trackingStatusAt=lastInfer}
+      if(lastInfer-trackingStatusAt>=650){const visible=handsFromPose();$('tracking').textContent=filteredHands.length?`${visible.length} hand(s) detected · MCP knuckles + fist center active`:'Looking for hands. Keep them in frame and improve lighting.';$('diagnostics').textContent=`Hands: ${poseFPS.toFixed(1)} FPS · inference ${Math.round(inferenceMs)} ms · ${$('trackingMode').value} mode · ${activeDelegate}`;trackingStatusAt=lastInfer}
     }catch(e){status('Hand inference error: '+e.message)}
   }
   gameStep(now);draw(now);requestAnimationFrame(loop)
